@@ -22,13 +22,20 @@ pipeline {
             steps {
                 echo '=== Подготовка тестового окружения ==='
                 sh '''
+                    # Установка qemu-system-arm, если отсутствует
+                    if ! command -v qemu-system-arm >/dev/null 2>&1; then
+                        echo "QEMU не найден, установка..."
+                        apt-get update
+                        apt-get install -y qemu-system-arm
+                    fi
+
                     mkdir -p ${TEST_RESULTS_DIR}
 
                     if [ ! -f ${QEMU_IMAGE_PATH} ]; then
                         echo "ОШИБКА: Образ OpenBMC не найден по пути ${QEMU_IMAGE_PATH}"
                         exit 1
                     fi
-                    
+
                     echo "Образ OpenBMC найден: ${QEMU_IMAGE_PATH}"
 
                     command -v qemu-system-arm >/dev/null 2>&1 || { echo "ОШИБКА: qemu-system-arm не установлен"; exit 1; }
