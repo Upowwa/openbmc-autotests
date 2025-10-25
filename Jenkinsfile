@@ -25,8 +25,8 @@ pipeline {
                     # Установка qemu-system-arm, если отсутствует
                     if ! command -v qemu-system-arm >/dev/null 2>&1; then
                         echo "QEMU не найден, установка..."
-                        apt-get update
-                        apt-get install -y qemu-system-arm
+                        sudo apt-get update
+                        sudo apt-get install -y qemu-system-arm
                     fi
 
                     mkdir -p ${TEST_RESULTS_DIR}
