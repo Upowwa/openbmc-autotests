@@ -18,6 +18,11 @@ pipeline {
     }
     
     stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
         stage('Подготовка окружения') {
             steps {
                 echo '=== Подготовка тестового окружения ==='
