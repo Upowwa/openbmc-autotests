@@ -27,11 +27,9 @@ pipeline {
             steps {
                 echo '=== Подготовка тестового окружения ==='
                 sh '''
-                    # Установка qemu-system-arm, если отсутствует
                     if ! command -v qemu-system-arm >/dev/null 2>&1; then
-                        echo "QEMU не найден, установка..."
-                        sudo apt-get update
-                        sudo apt-get install -y qemu-system-arm
+                    echo "ОШИБКА: qemu-system-arm не установлен в контейнере Jenkins"
+                    exit 1
                     fi
 
                     mkdir -p ${TEST_RESULTS_DIR}
@@ -110,7 +108,7 @@ pipeline {
                 '''
             }
         }
-        
+
         stage('Автотесты OpenBMC (API)') {
             steps {
                 echo '=== Запуск автоматических тестов API OpenBMC ==='
