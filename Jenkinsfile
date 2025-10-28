@@ -282,47 +282,40 @@ pipeline {
         stage('Нагрузочное тестирование OpenBMC') {
             steps {
                 echo '=== Запуск нагрузочного тестирования OpenBMC ==='
-                sh '''
-                    #!/bin/bash
-                    
+                sh(script: '''
                     REPORT_FILE="${TEST_RESULTS_DIR}/load_test_report.txt"
                     REPORT_JSON="${TEST_RESULTS_DIR}/load_test_report.json"
-                    
+
                     echo "^^Отчет по нагрузочному тестированию OpenBMC^^" > $REPORT_FILE
                     echo "Дата: $(date)" >> $REPORT_FILE
                     echo "Target: https://${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
                     echo "" >> $REPORT_FILE
-                    
+
                     echo '{"test_suite": "Load Tests", "timestamp": "'$(date -Iseconds)'", "tests": [' > $REPORT_JSON
-                    
+
                     # Тест 1: Последовательные запросы
                     echo "=== Тест 1: Последовательные запросы ===" | tee -a $REPORT_FILE
                     ITERATIONS=50
                     SUCCESS=0
                     FAILED_REQUESTS=0
                     TOTAL_TIME=0
-                    
+
                     for i in $(seq 1 $ITERATIONS); do
                         START=$(date +%s%N)
                         HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" https://${BMC_IP}:${HTTPS_PORT}/redfish/v1 2>/dev/null || echo "000")
                         END=$(date +%s%N)
-                        
                         DURATION=$((($END - $START) / 1000000))
                         TOTAL_TIME=$(($TOTAL_TIME + $DURATION))
-                        
                         if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
                             SUCCESS=$(($SUCCESS + 1))
                         else
                             FAILED_REQUESTS=$(($FAILED_REQUESTS + 1))
                         fi
-                        
                         if [ $(($i % 10)) -eq 0 ]; then
                             echo "  Прогресс: $i/$ITERATIONS запросов выполнено" | tee -a $REPORT_FILE
                         fi
                     done
-                    
                     AVG_TIME=$(($TOTAL_TIME / $ITERATIONS))
-                    
                     echo "" >> $REPORT_FILE
                     echo "Результаты последовательных запросов:" >> $REPORT_FILE
                     echo "  Всего запросов: $ITERATIONS" >> $REPORT_FILE
@@ -330,16 +323,13 @@ pipeline {
                     echo "  Неудачных: $FAILED_REQUESTS" >> $REPORT_FILE
                     echo "  Среднее время ответа: ${AVG_TIME}ms" >> $REPORT_FILE
                     echo "" >> $REPORT_FILE
-                    
                     echo '{"name": "Sequential Requests", "total": '$ITERATIONS', "success": '$SUCCESS', "failed": '$FAILED_REQUESTS', "avg_response_time_ms": '$AVG_TIME'},' >> $REPORT_JSON
-                    
+
                     # Тест 2: Параллельные запросы
                     echo "=== Тест 2: Параллельные запросы (10 одновременно) ===" | tee -a $REPORT_FILE
                     PARALLEL_REQUESTS=10
                     PARALLEL_SUCCESS=0
-                    
                     START_PARALLEL=$(date +%s%N)
-                    
                     for i in $(seq 1 $PARALLEL_REQUESTS); do
                         (
                             HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" https://${BMC_IP}:${HTTPS_PORT}/redfish/v1 2>/dev/null || echo "000")
@@ -348,34 +338,21 @@ pipeline {
                             fi
                         ) &
                     done
-                    
                     wait
                     END_PARALLEL=$(date +%s%N)
-                    
                     PARALLEL_DURATION=$((($END_PARALLEL - $START_PARALLEL) / 1000000))
-                    
                     echo "" >> $REPORT_FILE
                     echo "Результаты параллельных запросов:" >> $REPORT_FILE
                     echo "  Количество запросов: $PARALLEL_REQUESTS" >> $REPORT_FILE
                     echo "  Общее время выполнения: ${PARALLEL_DURATION}ms" >> $REPORT_FILE
                     echo "" >> $REPORT_FILE
-                    
                     echo '{"name": "Parallel Requests", "concurrent": '$PARALLEL_REQUESTS', "total_time_ms": '$PARALLEL_DURATION'},' >> $REPORT_JSON
-                    
+
                     # Тест 3: Стресс-тест (множественные эндпоинты)
                     echo "=== Тест 3: Стресс-тест различных эндпоинтов ===" | tee -a $REPORT_FILE
-                    
-                    ENDPOINTS=(
-                        "/redfish/v1"
-                        "/redfish/v1/Systems"
-                        "/redfish/v1/Chassis"
-                        "/redfish/v1/Managers"
-                        "/redfish/v1/SessionService"
-                    )
-                    
+                    ENDPOINTS=("/redfish/v1" "/redfish/v1/Systems" "/redfish/v1/Chassis" "/redfish/v1/Managers" "/redfish/v1/SessionService")
                     STRESS_SUCCESS=0
                     STRESS_FAILED=0
-                    
                     for endpoint in "${ENDPOINTS[@]}"; do
                         for i in $(seq 1 10); do
                             HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" "https://${BMC_IP}:${HTTPS_PORT}${endpoint}" 2>/dev/null || echo "000")
@@ -386,26 +363,23 @@ pipeline {
                             fi
                         done
                     done
-                    
                     echo "Результаты стресс-теста:" >> $REPORT_FILE
                     echo "  Успешных запросов: $STRESS_SUCCESS" >> $REPORT_FILE
                     echo "  Неудачных запросов: $STRESS_FAILED" >> $REPORT_FILE
                     echo "" >> $REPORT_FILE
-                    
                     echo '{"name": "Stress Test", "success": '$STRESS_SUCCESS', "failed": '$STRESS_FAILED'}' >> $REPORT_JSON
 
                     echo '], "summary": {"sequential_avg_ms": '$AVG_TIME', "parallel_time_ms": '$PARALLEL_DURATION', "stress_success": '$STRESS_SUCCESS', "stress_failed": '$STRESS_FAILED'}}' >> $REPORT_JSON
-
                     echo "===========================================" >> $REPORT_FILE
                     echo "ИТОГОВАЯ СТАТИСТИКА:" >> $REPORT_FILE
                     echo "  Последовательные запросы - среднее время: ${AVG_TIME}ms" >> $REPORT_FILE
                     echo "  Параллельные запросы - общее время: ${PARALLEL_DURATION}ms" >> $REPORT_FILE
                     echo "  Стресс-тест - успешно: $STRESS_SUCCESS, провалено: $STRESS_FAILED" >> $REPORT_FILE
-                    
                     cat $REPORT_FILE
-                '''
+                ''', shell: '/bin/bash')
             }
         }
+
         
         stage('Сборка итогового отчета') {
             steps {
