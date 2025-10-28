@@ -133,16 +133,16 @@ pipeline {
                         local test_cmd="$2"
                         local expected_code="$3"
                         
-                        echo "Тест: $test_name" | tee -a $REPORT_FILE
+                        echo "Тест: $test_name" >> $REPORT_FILE
                         
                         HTTP_CODE=$(eval "$test_cmd" 2>/dev/null || echo "000")
                         
                         if echo "$HTTP_CODE" | grep -q "$expected_code"; then
-                            echo "  Результат: PASSED (HTTP $HTTP_CODE)" | tee -a $REPORT_FILE
+                            echo "  Результат: PASSED (HTTP $HTTP_CODE)" >> $REPORT_FILE
                             PASSED=$((PASSED + 1))
                             echo '{"name": "'$test_name'", "status": "PASSED", "http_code": "'$HTTP_CODE'"},' >> $REPORT_JSON
                         else
-                            echo "  Результат: FAILED (HTTP $HTTP_CODE, ожидался $expected_code)" | tee -a $REPORT_FILE
+                            echo "  Результат: FAILED (HTTP $HTTP_CODE, ожидался $expected_code)" >> $REPORT_FILE
                             FAILED=$((FAILED + 1))
                             echo '{"name": "'$test_name'", "status": "FAILED", "http_code": "'$HTTP_CODE'", "expected": "'$expected_code'"},' >> $REPORT_JSON
                         fi
@@ -212,7 +212,7 @@ pipeline {
                         local url="$2"
                         local expected_content="$3"
                         
-                        echo "Тест: $test_name" | tee -a $REPORT_FILE
+                        echo "Тест: $test_name" >> $REPORT_FILE
                         
                         RESPONSE=$(curl -k -s -w "\\nHTTP_CODE:%{http_code}" "$url" 2>/dev/null || echo "ERROR")
                         HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
@@ -220,20 +220,20 @@ pipeline {
                         
                         if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "302" ]; then
                             if [ -n "$expected_content" ] && echo "$CONTENT" | grep -qi "$expected_content"; then
-                                echo "  Результат: PASSED (HTTP $HTTP_CODE, найден контент: $expected_content)" | tee -a $REPORT_FILE
+                                echo "  Результат: PASSED (HTTP $HTTP_CODE, найден контент: $expected_content)" >> $REPORT_FILE
                                 PASSED=$((PASSED + 1))
                                 echo '{"name": "'$test_name'", "status": "PASSED", "http_code": "'$HTTP_CODE'"},' >> $REPORT_JSON
                             elif [ -z "$expected_content" ]; then
-                                echo "  Результат: PASSED (HTTP $HTTP_CODE)" | tee -a $REPORT_FILE
+                                echo "  Результат: PASSED (HTTP $HTTP_CODE)" >> $REPORT_FILE
                                 PASSED=$((PASSED + 1))
                                 echo '{"name": "'$test_name'", "status": "PASSED", "http_code": "'$HTTP_CODE'"},' >> $REPORT_JSON
                             else
-                                echo "  Результат: FAILED (контент не найден)" | tee -a $REPORT_FILE
+                                echo "  Результат: FAILED (контент не найден)" >> $REPORT_FILE
                                 FAILED=$((FAILED + 1))
                                 echo '{"name": "'$test_name'", "status": "FAILED", "reason": "content not found"},' >> $REPORT_JSON
                             fi
                         else
-                            echo "  Результат: FAILED (HTTP $HTTP_CODE)" | tee -a $REPORT_FILE
+                            echo "  Результат: FAILED (HTTP $HTTP_CODE)" >> $REPORT_FILE
                             FAILED=$((FAILED + 1))
                             echo '{"name": "'$test_name'", "status": "FAILED", "http_code": "'$HTTP_CODE'"},' >> $REPORT_JSON
                         fi
@@ -295,7 +295,7 @@ pipeline {
         echo '{"test_suite": "Load Tests", "timestamp": "'$(date -Iseconds)'", "tests": [' > $REPORT_JSON
 
         # Тест 1: Последовательные запросы
-        echo "=== Тест 1: Последовательные запросы ===" | tee -a $REPORT_FILE
+        echo "=== Тест 1: Последовательные запросы ===" >> $REPORT_FILE
         ITERATIONS=50
         SUCCESS=0
         FAILED_REQUESTS=0
@@ -313,7 +313,7 @@ pipeline {
                 FAILED_REQUESTS=$(($FAILED_REQUESTS + 1))
             fi
             if [ $(($i % 10)) -eq 0 ]; then
-                echo "  Прогресс: $i/$ITERATIONS запросов выполнено" | tee -a $REPORT_FILE
+                echo "  Прогресс: $i/$ITERATIONS запросов выполнено" >> $REPORT_FILE
             fi
         done
         AVG_TIME=$(($TOTAL_TIME / $ITERATIONS))
@@ -327,7 +327,7 @@ pipeline {
         echo '{"name": "Sequential Requests", "total": '$ITERATIONS', "success": '$SUCCESS', "failed": '$FAILED_REQUESTS', "avg_response_time_ms": '$AVG_TIME'},' >> $REPORT_JSON
 
         # Тест 2: Параллельные запросы
-        echo "=== Тест 2: Параллельные запросы (10 одновременно) ===" | tee -a $REPORT_FILE
+        echo "=== Тест 2: Параллельные запросы (10 одновременно) ===" >> $REPORT_FILE
         PARALLEL_REQUESTS=10
         PARALLEL_SUCCESS=0
         START_PARALLEL=$(date +%s%N)
@@ -350,7 +350,7 @@ pipeline {
         echo '{"name": "Parallel Requests", "concurrent": '$PARALLEL_REQUESTS', "total_time_ms": '$PARALLEL_DURATION'},' >> $REPORT_JSON
 
         # Тест 3: Стресс-тест (множественные эндпоинты)
-        echo "=== Тест 3: Стресс-тест различных эндпоинтов ===" | tee -a $REPORT_FILE
+        echo "=== Тест 3: Стресс-тест различных эндпоинтов ===" >> $REPORT_FILE
         ENDPOINTS=("/redfish/v1" "/redfish/v1/Systems" "/redfish/v1/Chassis" "/redfish/v1/Managers" "/redfish/v1/SessionService")
         STRESS_SUCCESS=0
         STRESS_FAILED=0
@@ -377,7 +377,7 @@ pipeline {
         echo "  Параллельные запросы - общее время: ${PARALLEL_DURATION}ms" >> $REPORT_FILE
         echo "  Стресс-тест - успешно: $STRESS_SUCCESS, провалено: $STRESS_FAILED" >> $REPORT_FILE
         cat $REPORT_FILE
-        EOF
+EOF
         '''
             }
         }
