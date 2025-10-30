@@ -27,6 +27,7 @@ pipeline {
             steps {
                 echo '=== Подготовка тестового окружения ==='
                 sh '''
+                set +x
                     if ! command -v qemu-system-arm >/dev/null 2>&1; then
                     echo "ОШИБКА: qemu-system-arm не установлен в контейнере Jenkins"
                     exit 1
@@ -51,6 +52,7 @@ pipeline {
             steps {
                 echo '=== Запуск QEMU эмулятора с OpenBMC ==='
                 sh '''
+                set +x
                     if [ -f ${QEMU_PID_FILE} ]; then
                         OLD_PID=$(cat ${QEMU_PID_FILE})
                         if ps -p $OLD_PID > /dev/null 2>&1; then
@@ -60,14 +62,8 @@ pipeline {
                         rm -f ${QEMU_PID_FILE}
                     fi
                     
-                    nohup qemu-system-arm \\
-                        -m 256 \\
-                        -M romulus-bmc \\
-                        -nographic \\
-                        -drive file=${QEMU_IMAGE_PATH},format=raw,if=mtd \\
-                        -net nic \\
-                        -net user,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${HTTPS_PORT}-:443,hostfwd=tcp::${IPMI_PORT}-:623,hostname=qemu \\
-                        > ${QEMU_LOG_FILE} 2>&1 &
+                    nohup qemu-system-arm -m 256 -M romulus-bmc -nographic -drive file=${QEMU_IMAGE_PATH},format=raw,if=mtd -net nic \\
+                        -net user,hostfwd=tcp::${SSH_PORT}-:22,hostfwd=tcp::${HTTPS_PORT}-:443,hostfwd=tcp::${IPMI_PORT}-:623,hostname=qemu > ${QEMU_LOG_FILE} 2>&1 &
 
                     echo $! > ${QEMU_PID_FILE}
                     QEMU_PID=$(cat ${QEMU_PID_FILE})
@@ -82,11 +78,12 @@ pipeline {
             steps {
                 echo '=== Ожидание полной загрузки OpenBMC ==='
                 sh '''
-                    echo "Ожидание загрузки системы (120 секунд)..."
-                    sleep 120
+                set +x
+                    echo "Ожидание загрузки системы (180 секунд)..."
+                    sleep 180
                     
                     echo "Проверка доступности портов..."
-                    MAX_ATTEMPTS=20
+                    MAX_ATTEMPTS=5
                     ATTEMPT=0
                     
                     while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
@@ -113,12 +110,13 @@ pipeline {
             steps {
                 echo '=== Запуск автоматических тестов API OpenBMC ==='
                 sh '''
+                set +x
                     #!/bin/bash
                     
                     REPORT_FILE="${TEST_RESULTS_DIR}/api_test_report.txt"
                     REPORT_JSON="${TEST_RESULTS_DIR}/api_test_report.json"
                     
-                    echo "^^Отчет по тестированию API OpenBMC^^" > $REPORT_FILE
+                    echo "!Отчет по тестированию API OpenBMC!" > $REPORT_FILE
                     echo "Дата: $(date)" >> $REPORT_FILE
                     echo "BMC: ${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
                     echo "" >> $REPORT_FILE
@@ -150,34 +148,23 @@ pipeline {
                     }
                     
                     # Тест 1: Проверка доступности Redfish Service Root
-                    run_test "Redfish Service Root" \
-                        "curl -k -s -o /dev/null -w '%{http_code}' https://${BMC_IP}:${HTTPS_PORT}/redfish/v1" \
-                        "200\\|401"
+                    run_test "Redfish Service Root" "curl -k -s -o /dev/null -w '%{http_code}' https://${BMC_IP}:${HTTPS_PORT}/redfish/v1" "200\\|401"
                     
                     # Тест 2: Проверка SessionService
-                    run_test "Redfish Session Service" \
-                        "curl -k -s -o /dev/null -w '%{http_code}' https://${BMC_IP}:${HTTPS_PORT}/redfish/v1/SessionService" \
-                        "200\\|401"
+                    run_test "Redfish Session Service" "curl -k -s -o /dev/null -w '%{http_code}' https://${BMC_IP}:${HTTPS_PORT}/redfish/v1/SessionService" "200\\|401"
                     
                     # Тест 3: Проверка Systems
-                    run_test "Redfish Systems Collection" \
-                        "curl -k -s -o /dev/null -w '%{http_code}' https://${BMC_IP}:${HTTPS_PORT}/redfish/v1/Systems" \
-                        "200\\|401"
+                    run_test "Redfish Systems Collection" "curl -k -s -o /dev/null -w '%{http_code}' https://${BMC_IP}:${HTTPS_PORT}/redfish/v1/Systems" "200\\|401"
                     
                     # Тест 4: Проверка Chassis
-                    run_test "Redfish Chassis Collection" \
-                        "curl -k -s -o /dev/null -w '%{http_code}' https://${BMC_IP}:${HTTPS_PORT}/redfish/v1/Chassis" \
-                        "200\\|401"
+                    run_test "Redfish Chassis Collection" "curl -k -s -o /dev/null -w '%{http_code}' https://${BMC_IP}:${HTTPS_PORT}/redfish/v1/Chassis" "200\\|401"
                     
                     # Тест 5: Проверка Managers
-                    run_test "Redfish Managers Collection" \
-                        "curl -k -s -o /dev/null -w '%{http_code}' https://${BMC_IP}:${HTTPS_PORT}/redfish/v1/Managers" \
-                        "200\\|401"
+                    run_test "Redfish Managers Collection" "curl -k -s -o /dev/null -w '%{http_code}' https://${BMC_IP}:${HTTPS_PORT}/redfish/v1/Managers" "200\\|401"
 
                     sed -i '$ s/,$//' $REPORT_JSON
                     echo '], "summary": {"total": '$((PASSED + FAILED))', "passed": '$PASSED', "failed": '$FAILED'}}' >> $REPORT_JSON
 
-                    echo "=================================" >> $REPORT_FILE
                     echo "ИТОГО:" >> $REPORT_FILE
                     echo "  Пройдено: $PASSED" >> $REPORT_FILE
                     echo "  Провалено: $FAILED" >> $REPORT_FILE
@@ -192,12 +179,13 @@ pipeline {
             steps {
                 echo '=== Запуск тестов веб-интерфейса OpenBMC ==='
                 sh '''
+                set +x
                     #!/bin/bash
                     
                     REPORT_FILE="${TEST_RESULTS_DIR}/webui_test_report.txt"
                     REPORT_JSON="${TEST_RESULTS_DIR}/webui_test_report.json"
                     
-                    echo "^^Отчет по тестированию WebUI OpenBMC^^" > $REPORT_FILE
+                    echo "!Отчет по тестированию WebUI OpenBMC!" > $REPORT_FILE
                     echo "Дата: $(date)" >> $REPORT_FILE
                     echo "URL: https://${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
                     echo "" >> $REPORT_FILE
@@ -211,19 +199,20 @@ pipeline {
                         local test_name="$1"
                         local url="$2"
                         local expected_content="$3"
-                        
+
                         echo "Тест: $test_name" >> $REPORT_FILE
-                        
-                        RESPONSE=$(curl -k -s -w "\\nHTTP_CODE:%{http_code}" "$url" 2>/dev/null || echo "ERROR")
-                        HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
-                        CONTENT=$(echo "$RESPONSE" | grep -v "HTTP_CODE:")
-                        
-                        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "302" ]; then
-                            if [ -n "$expected_content" ] && echo "$CONTENT" | grep -qi "$expected_content"; then
+
+                        RESPONSE=$(curl -k -s --no-compression "$url" 2>/dev/null)
+                        HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null)
+
+                        echo "$RESPONSE" > "${TEST_RESULTS_DIR}/${test_name// /_}_response.txt"
+
+                        if [[ "$HTTP_CODE" =~ ^(200|401|302)$ ]]; then
+                            if [[ -n "$expected_content" ]] && echo "$RESPONSE" | grep -qi "$expected_content"; then
                                 echo "  Результат: PASSED (HTTP $HTTP_CODE, найден контент: $expected_content)" >> $REPORT_FILE
                                 PASSED=$((PASSED + 1))
                                 echo '{"name": "'$test_name'", "status": "PASSED", "http_code": "'$HTTP_CODE'"},' >> $REPORT_JSON
-                            elif [ -z "$expected_content" ]; then
+                            elif [[ -z "$expected_content" ]]; then
                                 echo "  Результат: PASSED (HTTP $HTTP_CODE)" >> $REPORT_FILE
                                 PASSED=$((PASSED + 1))
                                 echo '{"name": "'$test_name'", "status": "PASSED", "http_code": "'$HTTP_CODE'"},' >> $REPORT_JSON
@@ -241,34 +230,23 @@ pipeline {
                     }
                     
                     # Тест 1: Главная страница
-                    test_webpage "Главная страница WebUI" \
-                        "https://${BMC_IP}:${HTTPS_PORT}/" \
-                        ""
+                    test_webpage "Главная страница WebUI" "https://${BMC_IP}:${HTTPS_PORT}/" ""
                     
                     # Тест 2: Страница входа
-                    test_webpage "Страница входа" \
-                        "https://${BMC_IP}:${HTTPS_PORT}/login" \
-                        ""
+                    test_webpage "Страница входа" "https://${BMC_IP}:${HTTPS_PORT}/login" ""
                     
                     # Тест 3: Redfish веб-интерфейс
-                    test_webpage "Redfish интерфейс" \
-                        "https://${BMC_IP}:${HTTPS_PORT}/redfish/v1" \
-                        "redfish\\|RedfishVersion"
+                    test_webpage "Redfish интерфейс" "https://${BMC_IP}:${HTTPS_PORT}/redfish/v1" "redfish\\|RedfishVersion"
                     
-                    # Тест 4: Проверка статических ресурсов (если есть)
-                    test_webpage "Статические ресурсы CSS" \
-                        "https://${BMC_IP}:${HTTPS_PORT}/assets/styles.css" \
-                        ""
+                    # Тест 4: Проверка статических ресурсов
+                    test_webpage "Статические ресурсы CSS" "https://${BMC_IP}:${HTTPS_PORT}/assets/styles.css" ""
                     
-                    # Тест 5: API документация (если доступна)
-                    test_webpage "API документация" \
-                        "https://${BMC_IP}:${HTTPS_PORT}/redfish/v1/\\$metadata" \
-                        ""
+                    # Тест 5: API документация
+                    test_webpage "API документация" "https://${BMC_IP}:${HTTPS_PORT}/redfish/v1/\\$metadata" ""
 
                     sed -i '$ s/,$//' $REPORT_JSON
                     echo '], "summary": {"total": '$((PASSED + FAILED))', "passed": '$PASSED', "failed": '$FAILED'}}' >> $REPORT_JSON
 
-                    echo "====================================" >> $REPORT_FILE
                     echo "ИТОГО:" >> $REPORT_FILE
                     echo "  Пройдено: $PASSED" >> $REPORT_FILE
                     echo "  Провалено: $FAILED" >> $REPORT_FILE
@@ -283,11 +261,12 @@ pipeline {
             steps {
                 echo '=== Запуск нагрузочного тестирования OpenBMC ==='
                 sh '''
+                set +x
         bash <<'EOF'
         REPORT_FILE="${TEST_RESULTS_DIR}/load_test_report.txt"
         REPORT_JSON="${TEST_RESULTS_DIR}/load_test_report.json"
 
-        echo "^^Отчет по нагрузочному тестированию OpenBMC^^" > $REPORT_FILE
+        echo "!Отчет по нагрузочному тестированию OpenBMC!" > $REPORT_FILE
         echo "Дата: $(date)" >> $REPORT_FILE
         echo "Target: https://${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
         echo "" >> $REPORT_FILE
@@ -295,7 +274,7 @@ pipeline {
         echo '{"test_suite": "Load Tests", "timestamp": "'$(date -Iseconds)'", "tests": [' > $REPORT_JSON
 
         # Тест 1: Последовательные запросы
-        echo "=== Тест 1: Последовательные запросы ===" >> $REPORT_FILE
+        echo "--- Тест 1: Последовательные запросы ---" >> $REPORT_FILE
         ITERATIONS=50
         SUCCESS=0
         FAILED_REQUESTS=0
@@ -327,7 +306,7 @@ pipeline {
         echo '{"name": "Sequential Requests", "total": '$ITERATIONS', "success": '$SUCCESS', "failed": '$FAILED_REQUESTS', "avg_response_time_ms": '$AVG_TIME'},' >> $REPORT_JSON
 
         # Тест 2: Параллельные запросы
-        echo "=== Тест 2: Параллельные запросы (10 одновременно) ===" >> $REPORT_FILE
+        echo "--- Тест 2: Параллельные запросы (10 одновременно) ---" >> $REPORT_FILE
         PARALLEL_REQUESTS=10
         PARALLEL_SUCCESS=0
         START_PARALLEL=$(date +%s%N)
@@ -335,7 +314,7 @@ pipeline {
             (
                 HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" https://${BMC_IP}:${HTTPS_PORT}/redfish/v1 2>/dev/null || echo "000")
                 if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
-                    echo "SUCCESS"
+                    echo "SUCCESS" >> $REPORT_FILE
                 fi
             ) &
         done
@@ -350,7 +329,7 @@ pipeline {
         echo '{"name": "Parallel Requests", "concurrent": '$PARALLEL_REQUESTS', "total_time_ms": '$PARALLEL_DURATION'},' >> $REPORT_JSON
 
         # Тест 3: Стресс-тест (множественные эндпоинты)
-        echo "=== Тест 3: Стресс-тест различных эндпоинтов ===" >> $REPORT_FILE
+        echo "--- Тест 3: Стресс-тест различных эндпоинтов ---" >> $REPORT_FILE
         ENDPOINTS=("/redfish/v1" "/redfish/v1/Systems" "/redfish/v1/Chassis" "/redfish/v1/Managers" "/redfish/v1/SessionService")
         STRESS_SUCCESS=0
         STRESS_FAILED=0
@@ -371,10 +350,9 @@ pipeline {
         echo '{"name": "Stress Test", "success": '$STRESS_SUCCESS', "failed": '$STRESS_FAILED'}' >> $REPORT_JSON
 
         echo '], "summary": {"sequential_avg_ms": '$AVG_TIME', "parallel_time_ms": '$PARALLEL_DURATION', "stress_success": '$STRESS_SUCCESS', "stress_failed": '$STRESS_FAILED'}}' >> $REPORT_JSON
-        echo "===========================================" >> $REPORT_FILE
-        echo "ИТОГОВАЯ СТАТИСТИКА:" >> $REPORT_FILE
-        echo "  Последовательные запросы - среднее время: ${AVG_TIME}ms" >> $REPORT_FILE
-        echo "  Параллельные запросы - общее время: ${PARALLEL_DURATION}ms" >> $REPORT_FILE
+        echo "ИТОГО:" >> $REPORT_FILE
+        echo "  Среднее время последовательных запросов: ${AVG_TIME}ms" >> $REPORT_FILE
+        echo "  Общее время параллельных запросов: ${PARALLEL_DURATION}ms" >> $REPORT_FILE
         echo "  Стресс-тест - успешно: $STRESS_SUCCESS, провалено: $STRESS_FAILED" >> $REPORT_FILE
         cat $REPORT_FILE
 EOF
@@ -386,11 +364,12 @@ EOF
             steps {
                 echo '=== Генерация итогового отчета ==='
                 sh '''
+                set +x
                     FINAL_REPORT="${TEST_RESULTS_DIR}/final_report.txt"
                     
-                    echo "========================================" > $FINAL_REPORT
-                    echo "   ИТОГОВЫЙ ОТЧЕТ ТЕСТИРОВАНИЯ OpenBMC" >> $FINAL_REPORT
-                    echo "========================================" >> $FINAL_REPORT
+                    echo "=================================" > $FINAL_REPORT
+                    echo "   ИТОГОВЫЙ ОТЧЕТ ТЕСТИРОВАНИЯ   " >> $FINAL_REPORT
+                    echo "=================================" >> $FINAL_REPORT
                     echo "" >> $FINAL_REPORT
                     echo "Дата выполнения: $(date)" >> $FINAL_REPORT
                     echo "Jenkins Job: ${JOB_NAME}" >> $FINAL_REPORT
@@ -429,6 +408,7 @@ EOF
             archiveArtifacts artifacts: 'test-results/**/*.txt, test-results/**/*.json, qemu.log', allowEmptyArchive: true, fingerprint: true
 
             sh '''
+            set +x
                 if [ -f ${QEMU_PID_FILE} ]; then
                     PID=$(cat ${QEMU_PID_FILE})
                     if ps -p $PID > /dev/null 2>&1; then
