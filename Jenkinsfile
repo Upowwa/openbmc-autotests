@@ -195,14 +195,27 @@ pipeline {
                     PASSED=0
                     FAILED=0
 
+                    REPORT_FILE="${TEST_RESULTS_DIR}/webui_test_report.txt"
+                    REPORT_JSON="${TEST_RESULTS_DIR}/webui_test_report.json"
+                    
+                    echo "^^Отчет по тестированию WebUI OpenBMC^^" > $REPORT_FILE
+                    echo "Дата: $(date)" >> $REPORT_FILE
+                    echo "URL: https://${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
+                    echo "" >> $REPORT_FILE
+                    
+                    echo '{"test_suite": "WebUI Tests", "timestamp": "'$(date -Iseconds)'", "tests": [' > $REPORT_JSON
+                    
+                    PASSED=0
+                    FAILED=0
+
                     test_webpage() {
                         local test_name="$1"
                         local url="$2"
                         local expected_content="$3"
-                        
-                        echo "Тест: $test_name" >> $REPORT_FILE
 
-                        RESPONSE=$(curl -k -s -w --no-compression "\\nHTTP_CODE:%{http_code}" "$url" 2>/dev/null || echo "ERROR")
+                        echo "Тест: $test_name" >> $REPORT_FILE
+                        
+                        RESPONSE=$(curl -k -s -w "\\nHTTP_CODE:%{http_code}" "$url" 2>/dev/null || echo "ERROR")
                         HTTP_CODE=$(echo "$RESPONSE" | grep "HTTP_CODE:" | cut -d: -f2)
                         CONTENT=$(echo "$RESPONSE" | grep -v "HTTP_CODE:")
                         
@@ -315,7 +328,7 @@ pipeline {
                             if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ]; then
                                 echo "SUCCESS" >> $REPORT_FILE
                             fi
-                        ) &
+                        ) >/dev/null 2>&1 &
                     done
                     wait
                     END_PARALLEL=$(date +%s%N)
