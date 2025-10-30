@@ -70,42 +70,11 @@ pipeline {
                     
                     echo "QEMU запущен с PID: $QEMU_PID"
                     echo "Логи записываются в: ${QEMU_LOG_FILE}"
+                    sleep 120
                 '''
             }
         }
         
-        stage('Ожидание готовности OpenBMC') {
-            steps {
-                echo '=== Ожидание полной загрузки OpenBMC ==='
-                sh '''
-                    set +x
-                    echo "Ожидание загрузки системы (180 секунд)..."
-                    sleep 180
-                    
-                    echo "Проверка доступности портов..."
-                    MAX_ATTEMPTS=5
-                    ATTEMPT=0
-                    
-                    while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-                        if nc -z ${BMC_IP} ${HTTPS_PORT} 2>/dev/null; then
-                            echo "OpenBMC доступен на порту ${HTTPS_PORT}"
-
-                            if curl -k -s -o /dev/null -w "%{http_code}" https://${BMC_IP}:${HTTPS_PORT}/redfish/v1 | grep -q "200\\|401"; then
-                                echo "Redfish API отвечает"
-                                exit 0
-                            fi
-                        fi
-                        
-                        ATTEMPT=$((ATTEMPT + 1))
-                        echo "Попытка $ATTEMPT/$MAX_ATTEMPTS: OpenBMC еще не готов, ожидание..."
-                        sleep 5
-                    done
-
-                    echo "Продолжаем выполнение тестов..."
-                '''
-            }
-        }
-
         stage('Автотесты OpenBMC (API)') {
             steps {
                 echo '=== Запуск автоматических тестов API OpenBMC ==='
@@ -118,7 +87,7 @@ pipeline {
                     
                     echo "!Отчет по тестированию API OpenBMC!" > $REPORT_FILE
                     echo "Дата: $(date)" >> $REPORT_FILE
-                    echo "BMC: ${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
+                    echo "BMC Target: ${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
                     echo "" >> $REPORT_FILE
 
                     echo '{"test_suite": "API Tests", "timestamp": "'$(date -Iseconds)'", "tests": [' > $REPORT_JSON
@@ -181,26 +150,13 @@ pipeline {
                 sh '''
                     #!/bin/bash
                     set +x
-                    
+
                     REPORT_FILE="${TEST_RESULTS_DIR}/webui_test_report.txt"
                     REPORT_JSON="${TEST_RESULTS_DIR}/webui_test_report.json"
                     
                     echo "!Отчет по тестированию WebUI OpenBMC!" > $REPORT_FILE
                     echo "Дата: $(date)" >> $REPORT_FILE
-                    echo "URL: https://${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
-                    echo "" >> $REPORT_FILE
-                    
-                    echo '{"test_suite": "WebUI Tests", "timestamp": "'$(date -Iseconds)'", "tests": [' > $REPORT_JSON
-                    
-                    PASSED=0
-                    FAILED=0
-
-                    REPORT_FILE="${TEST_RESULTS_DIR}/webui_test_report.txt"
-                    REPORT_JSON="${TEST_RESULTS_DIR}/webui_test_report.json"
-                    
-                    echo "^^Отчет по тестированию WebUI OpenBMC^^" > $REPORT_FILE
-                    echo "Дата: $(date)" >> $REPORT_FILE
-                    echo "URL: https://${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
+                    echo "BMC Target: ${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
                     echo "" >> $REPORT_FILE
                     
                     echo '{"test_suite": "WebUI Tests", "timestamp": "'$(date -Iseconds)'", "tests": [' > $REPORT_JSON
@@ -280,7 +236,7 @@ pipeline {
 
                     echo "!Отчет по нагрузочному тестированию OpenBMC!" > $REPORT_FILE
                     echo "Дата: $(date)" >> $REPORT_FILE
-                    echo "Target: https://${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
+                    echo "BMC Target: ${BMC_IP}:${HTTPS_PORT}" >> $REPORT_FILE
                     echo "" >> $REPORT_FILE
 
                     echo '{"test_suite": "Load Tests", "timestamp": "'$(date -Iseconds)'", "tests": [' > $REPORT_JSON
@@ -318,9 +274,8 @@ pipeline {
                     echo '{"name": "Sequential Requests", "total": '$ITERATIONS', "success": '$SUCCESS', "failed": '$FAILED_REQUESTS', "avg_response_time_ms": '$AVG_TIME'},' >> $REPORT_JSON
 
                     # Тест 2: Параллельные запросы
-                    echo "--- Тест 2: Параллельные запросы (10 одновременно) ---" >> $REPORT_FILE
+                    echo "--- Тест 2: Параллельные запросы ---" >> $REPORT_FILE
                     PARALLEL_REQUESTS=10
-                    PARALLEL_SUCCESS=0
                     START_PARALLEL=$(date +%s%N)
                     for i in $(seq 1 $PARALLEL_REQUESTS); do
                         (
@@ -371,54 +326,12 @@ EOF
         '''
             }
         }
-
-        stage('Сборка итогового отчета') {
-            steps {
-                echo '=== Генерация итогового отчета ==='
-                sh '''
-                    set +x
-                    FINAL_REPORT="${TEST_RESULTS_DIR}/final_report.txt"
-                    
-                    echo "=================================" > $FINAL_REPORT
-                    echo "   ИТОГОВЫЙ ОТЧЕТ ТЕСТИРОВАНИЯ   " >> $FINAL_REPORT
-                    echo "=================================" >> $FINAL_REPORT
-                    echo "" >> $FINAL_REPORT
-                    echo "Дата выполнения: $(date)" >> $FINAL_REPORT
-                    echo "Jenkins Job: ${JOB_NAME}" >> $FINAL_REPORT
-                    echo "Build Number: ${BUILD_NUMBER}" >> $FINAL_REPORT
-                    echo "BMC Target: ${BMC_IP}:${HTTPS_PORT}" >> $FINAL_REPORT
-                    echo "" >> $FINAL_REPORT
-
-                    if [ -f "${TEST_RESULTS_DIR}/api_test_report.txt" ]; then
-                        echo "--- API ТЕСТЫ ---" >> $FINAL_REPORT
-                        tail -n 5 "${TEST_RESULTS_DIR}/api_test_report.txt" >> $FINAL_REPORT
-                        echo "" >> $FINAL_REPORT
-                    fi
-                    
-                    if [ -f "${TEST_RESULTS_DIR}/webui_test_report.txt" ]; then
-                        echo "--- WEBUI ТЕСТЫ ---" >> $FINAL_REPORT
-                        tail -n 5 "${TEST_RESULTS_DIR}/webui_test_report.txt" >> $FINAL_REPORT
-                        echo "" >> $FINAL_REPORT
-                    fi
-                    
-                    if [ -f "${TEST_RESULTS_DIR}/load_test_report.txt" ]; then
-                        echo "--- НАГРУЗОЧНОЕ ТЕСТИРОВАНИЕ ---" >> $FINAL_REPORT
-                        tail -n 5 "${TEST_RESULTS_DIR}/load_test_report.txt" >> $FINAL_REPORT
-                        echo "" >> $FINAL_REPORT
-                    fi
-                    
-                    cat $FINAL_REPORT
-                '''
-            }
-        }
     }
     
     post {
         always {
             echo '=== Завершение работы и очистка ==='
-
             archiveArtifacts artifacts: 'test-results/**/*.txt, test-results/**/*.json, qemu.log', allowEmptyArchive: true, fingerprint: true
-
             sh '''
                 set +x
                 if [ -f ${QEMU_PID_FILE} ]; then
