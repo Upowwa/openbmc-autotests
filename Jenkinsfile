@@ -196,38 +196,43 @@ pipeline {
                     FAILED=0
 
                     test_webpage() {
-                        local test_name="$1"
-                        local url="$2"
-                        local expected_content="$3"
+                        test_name="$1"
+                        url="$2"
+                        expected_content="$3"
 
-                        echo "Тест: $test_name" >> $REPORT_FILE
+                        echo "Тест: $test_name" >> "$REPORT_FILE"
 
                         RESPONSE=$(curl -k -s --no-compression "$url" 2>/dev/null)
                         HTTP_CODE=$(curl -k -s -o /dev/null -w "%{http_code}" "$url" 2>/dev/null)
 
-                        echo "$RESPONSE" > "${TEST_RESULTS_DIR}/${test_name// /_}_response.txt"
+                        echo "$RESPONSE" > "${TEST_RESULTS_DIR}/$(echo "$test_name" | tr ' ' '_')_response.txt"
 
-                        if [[ "$HTTP_CODE" =~ ^(200|401|302)$ ]]; then
-                            if [[ -n "$expected_content" ]] && echo "$RESPONSE" | grep -qi "$expected_content"; then
-                                echo "  Результат: PASSED (HTTP $HTTP_CODE, найден контент: $expected_content)" >> $REPORT_FILE
-                                PASSED=$((PASSED + 1))
-                                echo '{"name": "'$test_name'", "status": "PASSED", "http_code": "'$HTTP_CODE'"},' >> $REPORT_JSON
-                            elif [[ -z "$expected_content" ]]; then
-                                echo "  Результат: PASSED (HTTP $HTTP_CODE)" >> $REPORT_FILE
-                                PASSED=$((PASSED + 1))
-                                echo '{"name": "'$test_name'", "status": "PASSED", "http_code": "'$HTTP_CODE'"},' >> $REPORT_JSON
+                        if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "302" ]; then
+                            if [ -n "$expected_content" ]; then
+                                echo "$RESPONSE" | grep -qi "$expected_content"
+                                if [ $? -eq 0 ]; then
+                                    echo "  Результат: PASSED (HTTP $HTTP_CODE, найден контент: $expected_content)" >> "$REPORT_FILE"
+                                    PASSED=$((PASSED + 1))
+                                    echo '{"name": "'"$test_name"'", "status": "PASSED", "http_code": "'"$HTTP_CODE"'"},' >> "$REPORT_JSON"
+                                else
+                                    echo "  Результат: FAILED (контент не найден)" >> "$REPORT_FILE"
+                                    FAILED=$((FAILED + 1))
+                                    echo '{"name": "'"$test_name"'", "status": "FAILED", "reason": "content not found"},' >> "$REPORT_JSON"
+                                fi
                             else
-                                echo "  Результат: FAILED (контент не найден)" >> $REPORT_FILE
-                                FAILED=$((FAILED + 1))
-                                echo '{"name": "'$test_name'", "status": "FAILED", "reason": "content not found"},' >> $REPORT_JSON
+                                echo "  Результат: PASSED (HTTP $HTTP_CODE)" >> "$REPORT_FILE"
+                                PASSED=$((PASSED + 1))
+                                echo '{"name": "'"$test_name"'", "status": "PASSED", "http_code": "'"$HTTP_CODE"'"},' >> "$REPORT_JSON"
                             fi
                         else
-                            echo "  Результат: FAILED (HTTP $HTTP_CODE)" >> $REPORT_FILE
+                            echo "  Результат: FAILED (HTTP $HTTP_CODE)" >> "$REPORT_FILE"
                             FAILED=$((FAILED + 1))
-                            echo '{"name": "'$test_name'", "status": "FAILED", "http_code": "'$HTTP_CODE'"},' >> $REPORT_JSON
+                            echo '{"name": "'"$test_name"'", "status": "FAILED", "http_code": "'"$HTTP_CODE"'"},' >> "$REPORT_JSON"
                         fi
-                        echo "" >> $REPORT_FILE
+
+                        echo "" >> "$REPORT_FILE"
                     }
+
                     
                     # Тест 1: Главная страница
                     test_webpage "Главная страница WebUI" "https://${BMC_IP}:${HTTPS_PORT}/" ""
